@@ -48,14 +48,14 @@ class FeishuClient:
         """
         folder_name = folder_name.split(' ', 1)[0]  # 从右侧按空格拆分一次，取第一部分
         
-        req = CreateFolderReq.builder() \
-            .request_body(CreateFolderReqBody.builder()
+        req = CreateFolderFileRequest.builder() \
+            .request_body(CreateFolderFileRequestBody.builder()
                          .name(folder_name)
                          .folder_token(parent_token if parent_token else "")
                          .build()) \
             .build()
         
-        resp = self.client.drive.v1.file.create_folder(req)
+        resp:CreateFolderFileResponse = self.client.drive.v1.file.create_folder(req)
         if resp.code != 0:
             raise Exception(f"创建文件夹失败: {resp}")
             
@@ -80,7 +80,7 @@ class FeishuClient:
             .build()) \
         .build()
 
-        resp = self.client.docx.v1.document.create(req)
+        resp:CreateDocumentResponse = self.client.docx.v1.document.create(req)
         if resp.code != 0:
             raise Exception(f"创建文档失败: {resp}")
             

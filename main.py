@@ -77,10 +77,10 @@ def main():
             blocks = markdown_parser.parse_markdown_file(file_path)
             
             # 转换内容
-            feishu_blocks = feishu_client._format_blocks_for_feishu(blocks)
+            # feishu_blocks = feishu_client._format_blocks_for_feishu(blocks)
             
             # 创建飞书文档
-            result = feishu_client.create_document(file_name, feishu_blocks, parent_token)
+            result = feishu_client.create_document(file_name, parent_token)
             print(f"  文档创建成功: {file_name}")
             
         print(f"所有文档迁移完成！")
