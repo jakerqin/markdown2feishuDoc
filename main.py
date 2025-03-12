@@ -4,6 +4,7 @@ import time
 from dotenv import load_dotenv
 from src.markdown_parser import MarkdownParser
 from src.feishu_client import FeishuClient
+from config.config import LOCAL_MARKDOWN_DIR, DEFAULT_PARENT_FOLDER_TOKEN
 
 # 加载环境变量
 load_dotenv()
@@ -14,7 +15,10 @@ def main():
     feishu_client = FeishuClient()
     
     # 获取配置
-    markdown_dir = os.getenv('LOCAL_MARKDOWN_DIR')
+    markdown_dir = LOCAL_MARKDOWN_DIR
+
+    # 默认根文件夹
+    root_folder_token = DEFAULT_PARENT_FOLDER_TOKEN
     
     if not markdown_dir or not os.path.exists(markdown_dir):
         print(f"请在.env文件中设置正确的LOCAL_MARKDOWN_DIR，并确保目录存在")
@@ -28,9 +32,9 @@ def main():
         print(f"开始从本地Markdown文件迁移到飞书...")
         
         # 创建根文件夹
-        root_folder_name = "Markdown导入文档"
-        root_folder_token = feishu_client.create_folder(root_folder_name)
-        print(f"已创建根文件夹: {root_folder_name}")
+        # root_folder_name = "Markdown导入文档"
+        # root_folder_token = feishu_client.create_folder(root_folder_name)
+        # print(f"已创建根文件夹: {root_folder_name}")
         
         # 获取所有Markdown文件
         markdown_files = markdown_parser.get_markdown_files()

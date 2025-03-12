@@ -1,40 +1,42 @@
 import json
 import os
+from typing import List
+import lark_oapi as lark
 from lark_oapi.api.auth.v3 import *
 from lark_oapi.api.drive.v1 import *
 from lark_oapi.api.docx.v1 import *
-from lark_oapi.core.const import *
-from lark_oapi.core.utils import *
-from lark_oapi.core import Config, Client, setup_logging
-from config.config import FEISHU_APP_ID, FEISHU_APP_SECRET
+
+from config.config import FEISHU_APP_ID, FEISHU_APP_SECRET, DEFAULT_PARENT_FOLDER_TOKEN
 
 class FeishuClient:
     def __init__(self):
         self.app_id = FEISHU_APP_ID
         self.app_secret = FEISHU_APP_SECRET
-        # 配置 SDK
-        config = Config.builder() \
+        self.default_parent_folder_token = DEFAULT_PARENT_FOLDER_TOKEN
+        
+        # 初始化 SDK 客户端
+        self.client = lark.Client.builder() \
             .app_id(self.app_id) \
             .app_secret(self.app_secret) \
-            .log_level(logging.INFO) \
+            .log_level(lark.LogLevel.DEBUG) \
             .build()
-        # 初始化 SDK 客户端
-        self.client = Client(config)
+
         # 获取访问令牌
         self.access_token = self._get_access_token()
     
     def _get_access_token(self):
         """获取飞书访问令牌"""
-        req = CreateTenantAccessTokenReq.builder() \
-            .body(CreateTenantAccessTokenReqBody.builder()
-                  .app_id(self.app_id)
-                  .app_secret(self.app_secret)
-                  .build()) \
-            .build()
-        resp = self.client.auth.v3.tenant_access_token.create(req)
+        request: InternalTenantAccessTokenRequest = InternalTenantAccessTokenRequest.builder() \
+            .request_body(InternalTenantAccessTokenRequestBody.builder()
+                .app_id(self.app_id)
+                .app_secret(self.app_secret)
+            .build()) \
+        .build()
+        resp:InternalTenantAccessTokenResponse = self.client.auth.v3.tenant_access_token.internal(request)
         if resp.code != 0:
             raise Exception(f"获取访问令牌失败: {resp}")
-        return resp.tenant_access_token
+        
+        return json.loads(resp.raw.content).get('tenant_access_token')
         
     def create_folder(self, folder_name, parent_token=None):
         """创建飞书云文档文件夹
@@ -53,35 +55,66 @@ class FeishuClient:
                          .build()) \
             .build()
         
-        resp = self.client.drive.v1.folder.create(req)
+        resp = self.client.drive.v1.file.create_folder(req)
         if resp.code != 0:
             raise Exception(f"创建文件夹失败: {resp}")
             
         return resp.data.token
 
-    def create_document(self, title, blocks, folder_token=None):
-        """创建飞书文档
+    def create_document(self, title, folder_token=None):
+        """创建空的飞书文档
         Args:
             title: 文档标题
-            blocks: 文档内容块
             folder_token: 父文件夹的 token，如果为 None 则创建在根目录
         Returns:
             dict: 创建文档的响应结果
         """
         # 格式化内容块
-        formatted_blocks = self._format_blocks_for_feishu(blocks)
+        # formatted_blocks = self._format_blocks_for_feishu(blocks)
+
         
-        req = CreateDocumentReq.builder() \
-            .request_body(CreateDocumentReqBody.builder()
-                         .title(title)
-                         .folder_token(folder_token if folder_token else "")
-                         .content(formatted_blocks)
-                         .build()) \
-            .build()
-        
+        req: CreateDocumentRequest = CreateDocumentRequest.builder() \
+            .request_body(CreateDocumentRequestBody.builder()
+                .folder_token(folder_token if folder_token else "") 
+                .title(title.split(' ', 1)[0])   # 从右侧按空格拆分一次，取第一部分
+            .build()) \
+        .build()
+
         resp = self.client.docx.v1.document.create(req)
         if resp.code != 0:
             raise Exception(f"创建文档失败: {resp}")
+            
+        return resp.data
+
+    def update_document_block(self, document_id, markdown_content: List, block_id):
+        """创建飞书文档的文档块
+        Args:
+            document_id: 文档Id
+            block_id: 文档块Id，没有就是从文档根创建，document_id就是block_id
+            document_revision_id: -1
+            markdown_content: md内容 
+        Returns:
+            dict: 创建文档的响应结果
+        """
+        # 格式化内容块为飞书云文档的
+        formatted_blocks = self._format_blocks_for_feishu(blocks)
+        
+        request: CreateDocumentBlockChildrenRequest = CreateDocumentBlockChildrenRequest.builder() \
+            .document_revision_id(-1) \
+            .document_id(document_id) \
+            .request_body(CreateDocumentBlockChildrenRequestBody.builder() \
+                .children(formatted_blocks)
+            .index(0)
+            .build()) \
+        .build()
+
+        # 发起请求
+        response: CreateDocumentBlockChildrenResponse = self.client.docx.v1.document_block_children.create(request)
+        
+        # 调用飞书 API 更新文档
+        resp = self.client.docx.v1.document_block.update(req)
+        if resp.code != 0:
+            raise Exception(f"更新文档块失败: {resp}")
             
         return resp.data
 
@@ -113,84 +146,82 @@ class FeishuClient:
                 
         return resp.data.file_token
 
-    def _format_blocks_for_feishu(self, blocks):
-        """将块转换为飞书文档格式"""
+    def _format_blocks_for_feishu(self, blocks) -> List[Block]:
+        """将块转换为飞书文档格式的 Block 对象列表"""
         content = []
         
         for block in blocks:
             block_type = block.get("type")
             
             if block_type == "paragraph":
-                content.append({
-                    "paragraph": {
-                        "elements": [{"text": block.get("content", "")}]
-                    }
-                })
-            elif block_type in ["heading1", "heading2", "heading3"]:
-                level = int(block_type[-1])
-                content.append({
-                    "paragraph": {
-                        "style": {"headingLevel": level},
-                        "elements": [{"text": block.get("content", "")}]
-                    }
-                })
+                text = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().text(text).build())
+                
+            elif block_type == "heading1":
+                text = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().heading1(text).build())
+
+            elif block_type == "heading2":
+                text = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().heading2(text).build())
+
+            elif block_type == "heading3":
+                text = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().heading3(text).build())
+                
             elif block_type == "image":
-                content.append({
-                    "image": {
-                        "token": block.get("image_key", "")
-                    }
-                })
+                # todo image_key 应该是飞书云文档的图片key
+                image = Image.builder().token(block.get("image_key", "")).build()
+                content.append(Block.builder().image(image).build())
+                
             elif block_type == "bullet":
-                content.append({
-                    "paragraph": {
-                        "style": {"list": {"type": "bullet"}},
-                        "elements": [{"text": block.get("content", "")}]
-                    }
-                })
+                bullet = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().bullet(bullet).build())
+                
             elif block_type == "ordered":
-                content.append({
-                    "paragraph": {
-                        "style": {"list": {"type": "number"}},
-                        "elements": [{"text": block.get("content", "")}]
-                    }
-                })
-            elif block_type == "table":
-                rows = block.get("rows", [])
-                if rows:
-                    table_data = {
-                        "table": {
-                            "columns": len(rows[0]) if rows else 0,
-                            "rows": len(rows),
-                            "cells": []
-                        }
-                    }
+                text = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().ordered(text).build())
+                
+            # elif block_type == "table":
+            #     rows = block.get("rows", [])
+            #     if rows:
+            #         cells = []
+            #         for i, row in enumerate(rows):
+            #             for j, cell_text in enumerate(row):
+            #                 cell = TableCell.builder().row(i).col(j).elements([
+            #                     TextRun.builder().text(cell_text).build()
+            #                 ]).build()
+            #                 cells.append(cell)
                     
-                    for i, row in enumerate(rows):
-                        for j, cell in enumerate(row):
-                            table_data["table"]["cells"].append({
-                                "row": i,
-                                "col": j,
-                                "elements": [{"text": cell}]
-                            })
-                    
-                    content.append(table_data)
+            #         table = Table.builder().cells(cells).build()
+            #         content.append(Block.builder().table(table).build())
+                
             elif block_type == "code":
-                content.append({
-                    "code": {
-                        "language": block.get("language", "plain_text"),
-                        "elements": [{"text": block.get("content", "")}]
-                    }
-                })
+                code = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().code(code).build())
+                
             elif block_type == "quote":
-                content.append({
-                    "paragraph": {
-                        "style": {"quote": {}},
-                        "elements": [{"text": block.get("content", "")}]
-                    }
-                })
+                quote = Text.builder().style(TextStyle.builder().build()).elements([
+                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
+                ]).build()
+                content.append(Block.builder().quote(quote).build())
+                
             elif block_type == "divider":
-                content.append({
-                    "divider": {}
-                })
+                divider = Divider.builder().build()
+                content.append(Block.builder().divider(divider).build())
         
         return content
