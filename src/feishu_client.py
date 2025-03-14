@@ -1,12 +1,15 @@
 import json
 import os
+import time
 from typing import List
 import lark_oapi as lark
 from lark_oapi.api.auth.v3 import *
 from lark_oapi.api.drive.v1 import *
 from lark_oapi.api.docx.v1 import *
+from PIL import Image
 
 from config.config import FEISHU_APP_ID, FEISHU_APP_SECRET, DEFAULT_PARENT_FOLDER_TOKEN
+from src.markdown_parser import MarkdownParser
 
 class FeishuClient:
     def __init__(self):
@@ -18,7 +21,7 @@ class FeishuClient:
         self.client = lark.Client.builder() \
             .app_id(self.app_id) \
             .app_secret(self.app_secret) \
-            .log_level(lark.LogLevel.DEBUG) \
+            .log_level(lark.LogLevel.INFO) \
             .build()
 
         # 获取访问令牌
@@ -46,7 +49,7 @@ class FeishuClient:
         Returns:
             str: 创建的文件夹 token
         """
-        folder_name = folder_name.split(' ', 1)[0]  # 从右侧按空格拆分一次，取第一部分
+        folder_name = folder_name.rsplit(' ', 1)[0]  # 从右侧按空格拆分一次，取第一部分
         
         req = CreateFolderFileRequest.builder() \
             .request_body(CreateFolderFileRequestBody.builder()
@@ -61,167 +64,216 @@ class FeishuClient:
             
         return resp.data.token
 
-    def create_document(self, title, folder_token=None):
-        """创建空的飞书文档
-        Args:
+    def _upload_md_to_cloud(self, title, file_size, folder_token, md_content) -> str:
+        """md文件导入飞书文档
+        """
+        file_req: UploadAllFileRequest = UploadAllFileRequest.builder() \
+            .request_body(UploadAllFileRequestBody.builder()
+                .file_name(title + ".md")
+                .parent_type("explorer")
+                .parent_node(folder_token)
+                .size(file_size)
+                .file(md_content)
+                .build()) \
+        .build()
+
+        
+        file_resp: UploadAllFileResponse = self.client.drive.v1.file.upload_all(file_req)
+        if file_resp.code != 0:
+            raise Exception(f"上传md文件失败: {file_resp}")
+        # 获取上传任务ID
+        return file_resp.data.file_token
+
+    def _create_import_task(self, file_token, title, folder_token) -> str:
+        """创建md文件导入为云文档任务
+        args:
+            file_token: md文件的token
             title: 文档标题
-            folder_token: 父文件夹的 token，如果为 None 则创建在根目录
-        Returns:
-            dict: 创建文档的响应结果
+            folder_token: 文档所在文件夹的token
+        returns:
+            ticket: 导入任务的ticket
         """
-        # 格式化内容块
-        # formatted_blocks = self._format_blocks_for_feishu(blocks)
-
-        
-        req: CreateDocumentRequest = CreateDocumentRequest.builder() \
-            .request_body(CreateDocumentRequestBody.builder()
-                .folder_token(folder_token if folder_token else "") 
-                .title(title.split(' ', 1)[0])   # 从右侧按空格拆分一次，取第一部分
-            .build()) \
+        # 创建md文件导入为云文档
+        import_req: CreateImportTaskRequest = CreateImportTaskRequest.builder() \
+            .request_body(ImportTask.builder()
+                .file_extension("md")
+                .file_token(file_token)
+                .type("docx")
+                .file_name(title)
+                .point(ImportTaskMountPoint.builder()
+                    .mount_type(1)
+                    .mount_key(folder_token)
+                    .build())
+                .build()) \
         .build()
 
-        resp:CreateDocumentResponse = self.client.docx.v1.document.create(req)
-        if resp.code != 0:
-            raise Exception(f"创建文档失败: {resp}")
-            
-        return resp.data
+        import_resp: CreateImportTaskResponse = self.client.drive.v1.import_task.create(import_req)
+        if import_resp.code != 0:
+            raise Exception(f"创建导入任务失败: {json.loads(import_resp)}")
+        return import_resp.data.ticket 
 
-    def update_document_block(self, document_id, markdown_content: List, block_id):
-        """创建飞书文档的文档块
+    def _get_import_docx_token(self, ticket) -> str:
+        """轮询导入任务状态，获取导入文档的token
+        args:
+            ticket: 导入任务的ticket
+        returns:
+            docx_token: 导入文档的token
+        """
+        request: GetImportTaskRequest = GetImportTaskRequest.builder() \
+            .ticket(ticket) \
+        .build()
+
+        while True:
+            response: GetImportTaskResponse = self.client.drive.v1.import_task.get(request)
+            if response.code!= 0:
+                raise Exception(f"获取导入任务状态失败: {json.loads(status_resp)}")
+
+            if response.data.result.job_status == 0: # 处理成功
+                return response.data.result.token
+            elif response.data.result.job_status == 2 or response.data.result.job_status == 2: # 处理中
+                print("任务处理中...")
+            else: # 处理失败
+                raise Exception(f"任务处理失败：{response.data.result.job_error_msg}")
+                
+            # 等待一段时间后再次查询状态
+            time.sleep(2)
+        
+
+    def import_md_to_docx(self, file_path, title, folder_token):
+        """md文件导入飞书文档
+        """
+        # 读取并解析Markdown文件
+        with open(file_path, 'r', encoding='utf-8') as f:
+            md_content = f.read()
+        file_size = os.path.getsize(file_path)
+
+        # 提取出markdown的所有图片路径
+        img_path_list: List = MarkdownParser.extract_images_from_markdown(file_path, md_content)
+
+
+        # 上传md文件, 获取file_token
+        file_token = self._upload_md_to_cloud(title, file_size, folder_token, md_content)
+
+        # 创建md文件导入为云文档, 获取ticket
+        ticket = self._create_import_task(file_token, title, folder_token)
+
+        # 轮询导入任务状态，获取导入文档的token
+        doc_token = self._get_import_docx_token(ticket)
+
+        # 把markdown中记录的图片路径，上传图片到飞书文档，更新image block的image_key
+        self._update_document_images(doc_token, img_path_list)
+        # 删除上传的md文件
+        self._del_file(file_token)
+
+    def _update_document_images(self, doc_token, img_path_list: List):
+        """更新文档中的图片
         Args:
-            document_id: 文档Id
-            block_id: 文档块Id，没有就是从文档根创建，document_id就是block_id
-            document_revision_id: -1
-            markdown_content: md内容 
-        Returns:
-            dict: 创建文档的响应结果
+            doc_token: 文档token
+            ima_path_list: markdown中记录的图片地址列表
         """
-        # 格式化内容块为飞书云文档的
-        formatted_blocks = self._format_blocks_for_feishu(blocks)
-        
-        request: CreateDocumentBlockChildrenRequest = CreateDocumentBlockChildrenRequest.builder() \
+        # 获取文档所有块
+        request: ListDocumentBlockRequest = ListDocumentBlockRequest.builder() \
+            .page_size(500) \
+            .document_id(doc_token) \
             .document_revision_id(-1) \
-            .document_id(document_id) \
-            .request_body(CreateDocumentBlockChildrenRequestBody.builder() \
-                .children(formatted_blocks)
-            .index(0)
-            .build()) \
         .build()
+        # 访问img_path_list的索引位置
+        img_path_index = 0
 
-        # 发起请求
-        response: CreateDocumentBlockChildrenResponse = self.client.docx.v1.document_block_children.create(request)
-        
-        # 调用飞书 API 更新文档
-        resp = self.client.docx.v1.document_block.update(req)
-        if resp.code != 0:
-            raise Exception(f"更新文档块失败: {resp}")
+        while True:
+            resp: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request)
+            if resp.code != 0:
+                raise Exception(f"获取文档块失败: {resp}")
+                
+            # 遍历所有块
+            for block in resp.data.items:
+                # 检查是否为图片块
+                if block.block_type == 27 and img_path_index < len(img_path_list): # 图片块
+                    # 上传图片到飞书文档指定的 block 中
+                    img_path = img_path_list[img_path_index]
+                    image_token = self._upload_image_to_doc(img_path, block.block_id, doc_token)
+                    img_path_index += 1
+
+                    # 更新图片块的image_key
+                    self._update_doc_image_block(img_path, block.block_id, doc_token, image_token)
             
-        return resp.data
+            # 检查是否还有更多块
+            if not resp.data.has_more:
+                break
+                
+            # 更新请求参数，获取下一页
+            request.page_token = resp.data.page_token
 
-    def upload_image(self, image_path):
-        """上传图片到飞书文档
+    def _upload_image_to_doc(self, file_path, block_id, document_id):
+        """上传图片到飞书文档, 这个图片跟文档绑定在一起，删除文档时图片也会被删除，方便管理
         Args:
             image_path: 图片路径
         Returns:
             str: 图片的 token
         """
-        with open(image_path, 'rb') as f:
-            file_content = f.read()
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+
+        image_content = open(file_path, "rb")
+
+        extra: dict = { "drive_route_token": document_id }
+        request: UploadAllMediaRequest = UploadAllMediaRequest.builder() \
+            .request_body(UploadAllMediaRequestBody.builder()
+                .file_name(file_name)
+                .parent_node(block_id)
+                .parent_type("docx_image")
+                .size(file_size)
+                .extra(json.dumps(extra, ensure_ascii=False, indent=2))  
+                .file(image_content)
+            .build()) \
+        .build()
         
-        file_name = os.path.basename(image_path)
-        file_size = os.path.getsize(image_path)
-        
-        req = UploadAllMediaReq.builder() \
-            .request_body(UploadAllMediaReqBody.builder()
-                         .file_name(file_name)
-                         .file_size(file_size)
-                         .parent_type("docx_image")
-                         .file(file_content)
-                         .build()) \
-            .build()
-        
-        resp = self.client.drive.v1.media.upload_all(req)
+        resp: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request)
         if resp.code != 0:
-            raise Exception(f"上传图片失败: {resp}")
-                
+            raise Exception(f"上传图片到云文档失败: {resp}")
+        print(f"上传图片到云文档成功: {resp}")
         return resp.data.file_token
 
-    def _format_blocks_for_feishu(self, blocks) -> List[Block]:
-        """将块转换为飞书文档格式的 Block 对象列表"""
-        content = []
-        
-        for block in blocks:
-            block_type = block.get("type")
-            
-            if block_type == "paragraph":
-                text = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().text(text).build())
-                
-            elif block_type == "heading1":
-                text = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().heading1(text).build())
+    def _update_doc_image_block(self, file_path, block_id, document_id, image_token):
+        """更新文档中的图片块
+        Args:
+            block_id: 图片块的 id
+            document_id: 文档的 id
+            image_token: 图片的 token
+        """
+        # 获取图片尺寸
+        with Image.open(file_path) as img:
+            width, height = img.size
+            print(f"图片尺寸: {width}x{height}")
 
-            elif block_type == "heading2":
-                text = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().heading2(text).build())
+        # 更新图片块的image_key
+        request: PatchDocumentBlockRequest = PatchDocumentBlockRequest.builder() \
+            .document_id(document_id) \
+            .block_id(block_id) \
+            .document_revision_id(-1) \
+            .request_body(UpdateBlockRequest.builder()
+                .replace_image(ReplaceImageRequest.builder()
+                    .token(image_token)
+                    .width(width)
+                    .height(height)
+                    .build())
+                .build()) \
+        .build()
 
-            elif block_type == "heading3":
-                text = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().heading3(text).build())
-                
-            elif block_type == "image":
-                # todo image_key 应该是飞书云文档的图片key
-                image = Image.builder().token(block.get("image_key", "")).build()
-                content.append(Block.builder().image(image).build())
-                
-            elif block_type == "bullet":
-                bullet = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().bullet(bullet).build())
-                
-            elif block_type == "ordered":
-                text = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().ordered(text).build())
-                
-            # elif block_type == "table":
-            #     rows = block.get("rows", [])
-            #     if rows:
-            #         cells = []
-            #         for i, row in enumerate(rows):
-            #             for j, cell_text in enumerate(row):
-            #                 cell = TableCell.builder().row(i).col(j).elements([
-            #                     TextRun.builder().text(cell_text).build()
-            #                 ]).build()
-            #                 cells.append(cell)
-                    
-            #         table = Table.builder().cells(cells).build()
-            #         content.append(Block.builder().table(table).build())
-                
-            elif block_type == "code":
-                code = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().code(code).build())
-                
-            elif block_type == "quote":
-                quote = Text.builder().style(TextStyle.builder().build()).elements([
-                    TextElement.builder().text_run(TextRun.builder().content(block.get("content", ""))).build()
-                ]).build()
-                content.append(Block.builder().quote(quote).build())
-                
-            elif block_type == "divider":
-                divider = Divider.builder().build()
-                content.append(Block.builder().divider(divider).build())
-        
-        return content
+        # 发起请求
+        response: PatchDocumentBlockResponse = self.client.docx.v1.document_block.patch(request)
+        if response.code!= 0:
+            raise Exception(f"更新图片块失败: {resp}")
+        print("更新图片块成功")
+
+    def _del_file(self, file_token): 
+        """删除文件
+        """
+        request: DeleteFileRequest = DeleteFileRequest.builder() \
+           .file_token(file_token) \
+           .type("file")  \
+        .build()
+        resp: DeleteFileResponse = self.client.drive.v1.file.delete(request)
+        if resp.code!= 0:
+            raise Exception(f"删除文件失败: {json.loads(resp)}")
+        print("删除文件成功")

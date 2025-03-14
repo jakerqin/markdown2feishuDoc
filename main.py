@@ -10,13 +10,13 @@ from config.config import LOCAL_MARKDOWN_DIR, DEFAULT_PARENT_FOLDER_TOKEN
 load_dotenv()
 
 def main():
-    # 初始化客户端
-    markdown_parser = MarkdownParser()
-    feishu_client = FeishuClient()
-    
     # 获取配置
     markdown_dir = LOCAL_MARKDOWN_DIR
 
+    # 初始化客户端
+    feishu_client = FeishuClient()
+    markdown_parser = MarkdownParser(markdown_dir)
+    
     # 默认根文件夹
     root_folder_token = DEFAULT_PARENT_FOLDER_TOKEN
     
@@ -31,11 +31,6 @@ def main():
     try:
         print(f"开始从本地Markdown文件迁移到飞书...")
         
-        # 创建根文件夹
-        # root_folder_name = "Markdown导入文档"
-        # root_folder_token = feishu_client.create_folder(root_folder_name)
-        # print(f"已创建根文件夹: {root_folder_name}")
-        
         # 获取所有Markdown文件
         markdown_files = markdown_parser.get_markdown_files()
         print(f"找到{len(markdown_files)}个Markdown文件")
@@ -46,7 +41,7 @@ def main():
         # 处理每个Markdown文件
         for file_info in markdown_files:
             file_path = file_info['path']
-            file_name = file_info['name']
+            file_name = file_info['name'].rsplit(' ', 1)[0]
             folder_path = file_info['folder']
             
             print(f"正在处理: {file_path}")
@@ -72,16 +67,11 @@ def main():
                         print(f"  创建文件夹: {current_path}")
                     
                 parent_token = folder_mapping[current_path]
+
+            # 上传markdown文件为飞书文档
+            feishu_client.import_md_to_docx(file_path, file_name, parent_token)
             
-            # 解析Markdown文件
-            blocks = markdown_parser.parse_markdown_file(file_path)
-            
-            # 转换内容
-            # feishu_blocks = feishu_client._format_blocks_for_feishu(blocks)
-            
-            # 创建飞书文档
-            result = feishu_client.create_document(file_name, parent_token)
-            print(f"  文档创建成功: {file_name}")
+            print(f"  文档上传完成: {file_name}")
             
         print(f"所有文档迁移完成！")
         
