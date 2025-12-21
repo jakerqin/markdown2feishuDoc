@@ -1,11 +1,7 @@
 import os
 import re
-import uuid
-import markdown
-from bs4 import BeautifulSoup
 from urllib.parse import unquote
 from dotenv import load_dotenv
-from typing import List
 
 load_dotenv()
 

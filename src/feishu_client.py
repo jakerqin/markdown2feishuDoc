@@ -125,12 +125,12 @@ class FeishuClient:
 
         while True:
             response: GetImportTaskResponse = self.client.drive.v1.import_task.get(request)
-            if response.code!= 0:
-                raise Exception(f"获取导入任务状态失败: {json.loads(status_resp)}")
+            if response.code != 0:
+                raise Exception(f"获取导入任务状态失败: {response}")
 
             if response.data.result.job_status == 0: # 处理成功
                 return response.data.result.token
-            elif response.data.result.job_status == 2 or response.data.result.job_status == 2: # 处理中
+            elif response.data.result.job_status == 1 or response.data.result.job_status == 2: # 处理中
                 print("任务处理中...")
             else: # 处理失败
                 raise Exception(f"任务处理失败：{response.data.result.job_error_msg}")
@@ -262,8 +262,8 @@ class FeishuClient:
 
         # 发起请求
         response: PatchDocumentBlockResponse = self.client.docx.v1.document_block.patch(request)
-        if response.code!= 0:
-            raise Exception(f"更新图片块失败: {resp}")
+        if response.code != 0:
+            raise Exception(f"更新图片块失败: {response}")
         print("更新图片块成功")
 
     def _del_file(self, file_token): 

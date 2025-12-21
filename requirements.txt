@@ -1,5 +1,4 @@
 requests
 python-dotenv
-markdown
 lark-oapi
 Pillow
