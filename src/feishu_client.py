@@ -177,7 +177,8 @@ class FeishuClient:
         doc_token = self._get_import_docx_token(ticket)
 
         # 把markdown中记录的图片路径，上传图片到飞书文档，更新image block的image_key
-        self._update_document_images(doc_token, img_path_list)
+        if img_path_list:
+            self._update_document_images(doc_token, img_path_list)
         # 删除上传的md文件
         self._del_file(file_token)
 
