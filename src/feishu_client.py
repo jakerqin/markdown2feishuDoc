@@ -67,6 +67,11 @@ class FeishuClient:
     def _upload_md_to_cloud(self, title, file_size, folder_token, md_content) -> str:
         """md文件导入飞书文档
         """
+        print(f"[DEBUG] 开始上传MD文件")
+        print(f"[DEBUG] 文件名: {title}.md")
+        print(f"[DEBUG] 文件大小: {file_size} bytes")
+        print(f"[DEBUG] 目标文件夹token: {folder_token}")
+        
         file_req: UploadAllFileRequest = UploadAllFileRequest.builder() \
             .request_body(UploadAllFileRequestBody.builder()
                 .file_name(title + ".md")
@@ -79,8 +84,17 @@ class FeishuClient:
 
         
         file_resp: UploadAllFileResponse = self.client.drive.v1.file.upload_all(file_req)
+        
+        # 打印详细响应信息
+        print(f"[DEBUG] 响应code: {file_resp.code}")
+        print(f"[DEBUG] 响应msg: {file_resp.msg}")
+        if hasattr(file_resp, 'raw') and file_resp.raw:
+            print(f"[DEBUG] 原始响应: {file_resp.raw.content}")
+        if file_resp.data:
+            print(f"[DEBUG] 响应data: {file_resp.data}")
+        
         if file_resp.code != 0:
-            raise Exception(f"上传md文件失败: {file_resp}")
+            raise Exception(f"上传md文件失败: code={file_resp.code}, msg={file_resp.msg}")
         # 获取上传任务ID
         return file_resp.data.file_token
 
