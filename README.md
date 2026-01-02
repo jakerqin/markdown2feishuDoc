@@ -27,6 +27,9 @@ pip3 install -r requirements.txt
      - `drive:drive:write` - 创建、编辑、上传云空间文件
      - `docx:document` - 查看、创建云文档
      - `docx:document:readonly` - 查看云文档
+     - `drive:file` - 上传、下载文件到云空间
+     - `drive:file:upload` - 上传文件
+     - `drive:drive` - 查看、评论、编辑和管理云空间中所有文件
 3. 获取应用的 **App ID** 和 **App Secret**
 
 ### 3. 配置文件夹权限

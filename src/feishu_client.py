@@ -67,6 +67,11 @@ class FeishuClient:
     def _upload_md_to_cloud(self, title, file_size, folder_token, md_content) -> str:
         """md文件导入飞书文档
         """
+        print(f"[DEBUG] 开始上传MD文件")
+        print(f"[DEBUG] 文件名: {title}.md")
+        print(f"[DEBUG] 文件大小: {file_size} bytes")
+        print(f"[DEBUG] 目标文件夹token: {folder_token}")
+        
         file_req: UploadAllFileRequest = UploadAllFileRequest.builder() \
             .request_body(UploadAllFileRequestBody.builder()
                 .file_name(title + ".md")
@@ -79,8 +84,17 @@ class FeishuClient:
 
         
         file_resp: UploadAllFileResponse = self.client.drive.v1.file.upload_all(file_req)
+        
+        # 打印详细响应信息
+        print(f"[DEBUG] 响应code: {file_resp.code}")
+        print(f"[DEBUG] 响应msg: {file_resp.msg}")
+        if hasattr(file_resp, 'raw') and file_resp.raw:
+            print(f"[DEBUG] 原始响应: {file_resp.raw.content}")
+        if file_resp.data:
+            print(f"[DEBUG] 响应data: {file_resp.data}")
+        
         if file_resp.code != 0:
-            raise Exception(f"上传md文件失败: {file_resp}")
+            raise Exception(f"上传md文件失败: code={file_resp.code}, msg={file_resp.msg}")
         # 获取上传任务ID
         return file_resp.data.file_token
 
@@ -128,11 +142,13 @@ class FeishuClient:
             if response.code != 0:
                 raise Exception(f"获取导入任务状态失败: {response}")
 
-            if response.data.result.job_status == 0: # 处理成功
+            job_status = response.data.result.job_status
+            if job_status == 2:  # 处理成功
+                print(f"[DEBUG] 导入文档成功")
                 return response.data.result.token
-            elif response.data.result.job_status == 1 or response.data.result.job_status == 2: # 处理中
+            elif job_status == 0 or job_status == 1:  # 初始化或处理中
                 print("任务处理中...")
-            else: # 处理失败
+            else:  # job_status == 3，处理失败
                 raise Exception(f"任务处理失败：{response.data.result.job_error_msg}")
                 
             # 等待一段时间后再次查询状态
@@ -161,7 +177,8 @@ class FeishuClient:
         doc_token = self._get_import_docx_token(ticket)
 
         # 把markdown中记录的图片路径，上传图片到飞书文档，更新image block的image_key
-        self._update_document_images(doc_token, img_path_list)
+        if img_path_list:
+            self._update_document_images(doc_token, img_path_list)
         # 删除上传的md文件
         self._del_file(file_token)
 
