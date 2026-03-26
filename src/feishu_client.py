@@ -143,10 +143,10 @@ class FeishuClient:
                 raise Exception(f"获取导入任务状态失败: {response}")
 
             job_status = response.data.result.job_status
-            if job_status == 2:  # 处理成功
+            if job_status == 0:  # 处理成功
                 print(f"[DEBUG] 导入文档成功")
                 return response.data.result.token
-            elif job_status == 0 or job_status == 1:  # 初始化或处理中
+            elif job_status == 1 or job_status == 2:  # 初始化或处理中
                 print("任务处理中...")
             else:  # job_status == 3，处理失败
                 raise Exception(f"任务处理失败：{response.data.result.job_error_msg}")
