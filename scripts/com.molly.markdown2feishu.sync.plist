@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PYTHONIOENCODING</key>
+		<string>utf-8</string>
+	</dict>
+	<key>Label</key>
+	<string>com.molly.markdown2feishu.sync</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/open</string>
+		<string>-a</string>
+		<string>Terminal</string>
+		<string>/Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command</string>
+	</array>
+	<key>StandardErrorPath</key>
+	<string>/Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.out.log</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>5</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>/Users/molly/projects/markdown2feishuDoc</string>
+</dict>
+</plist>

@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from typing import List
+from typing import List, Optional
 import lark_oapi as lark
 from lark_oapi.api.auth.v3 import *
 from lark_oapi.api.drive.v1 import *
@@ -10,6 +10,28 @@ from PIL import Image
 
 from config.config import FEISHU_APP_ID, FEISHU_APP_SECRET, DEFAULT_PARENT_FOLDER_TOKEN
 from src.markdown_parser import MarkdownParser
+
+
+def format_response_error(action, resp):
+    parts = [action]
+
+    code = getattr(resp, "code", None)
+    if code is not None:
+        parts.append(f"code={code}")
+
+    msg = getattr(resp, "msg", None)
+    if msg:
+        parts.append(f"msg={msg}")
+
+    raw = getattr(resp, "raw", None)
+    content = getattr(raw, "content", None)
+    if content:
+        if isinstance(content, bytes):
+            content = content.decode("utf-8", errors="replace")
+        parts.append(f"raw={content}")
+
+    return ": ".join([parts[0], ", ".join(parts[1:])]) if len(parts) > 1 else action
+
 
 class FeishuClient:
     def __init__(self):
@@ -37,7 +59,7 @@ class FeishuClient:
         .build()
         resp:InternalTenantAccessTokenResponse = self.client.auth.v3.tenant_access_token.internal(request)
         if resp.code != 0:
-            raise Exception(f"获取访问令牌失败: {resp}")
+            raise Exception(format_response_error("获取访问令牌失败", resp))
         
         return json.loads(resp.raw.content).get('tenant_access_token')
         
@@ -49,8 +71,6 @@ class FeishuClient:
         Returns:
             str: 创建的文件夹 token
         """
-        folder_name = folder_name.rsplit(' ', 1)[0]  # 从右侧按空格拆分一次，取第一部分
-        
         req = CreateFolderFileRequest.builder() \
             .request_body(CreateFolderFileRequestBody.builder()
                          .name(folder_name)
@@ -60,9 +80,62 @@ class FeishuClient:
         
         resp:CreateFolderFileResponse = self.client.drive.v1.file.create_folder(req)
         if resp.code != 0:
-            raise Exception(f"创建文件夹失败: {resp}")
+            raise Exception(format_response_error("创建文件夹失败", resp))
             
         return resp.data.token
+
+    def get_child_folder_token(self, parent_token, folder_name):
+        """查找父目录下的同名文件夹 token"""
+        candidate_names = {folder_name}
+        fallback_name = folder_name.rsplit(" ", 1)[0]
+        if fallback_name:
+            candidate_names.add(fallback_name)
+
+        request = ListFileRequest.builder() \
+            .folder_token(parent_token) \
+            .page_size(200) \
+            .build()
+
+        while True:
+            response: ListFileResponse = self.client.drive.v1.file.list(request)
+            if response.code != 0:
+                raise Exception(format_response_error("查询文件夹失败", response))
+
+            files = response.data.files or []
+            for file_info in files:
+                if file_info.type == "folder" and file_info.name in candidate_names:
+                    return file_info.token
+
+            if not response.data.has_more:
+                break
+
+            request.page_token = response.data.next_page_token
+
+        return None
+
+    def get_child_doc_token(self, parent_token, doc_name):
+        """查找父目录下同名文档 token"""
+        request = ListFileRequest.builder() \
+            .folder_token(parent_token) \
+            .page_size(200) \
+            .build()
+
+        while True:
+            response: ListFileResponse = self.client.drive.v1.file.list(request)
+            if response.code != 0:
+                raise Exception(format_response_error("查询文档失败", response))
+
+            files = response.data.files or []
+            for file_info in files:
+                if file_info.type == "docx" and file_info.name == doc_name:
+                    return file_info.token
+
+            if not response.data.has_more:
+                break
+
+            request.page_token = response.data.next_page_token
+
+        return None
 
     def _upload_md_to_cloud(self, title, file_size, folder_token, md_content) -> str:
         """md文件导入飞书文档
@@ -94,7 +167,7 @@ class FeishuClient:
             print(f"[DEBUG] 响应data: {file_resp.data}")
         
         if file_resp.code != 0:
-            raise Exception(f"上传md文件失败: code={file_resp.code}, msg={file_resp.msg}")
+            raise Exception(format_response_error("上传md文件失败", file_resp))
         # 获取上传任务ID
         return file_resp.data.file_token
 
@@ -123,7 +196,7 @@ class FeishuClient:
 
         import_resp: CreateImportTaskResponse = self.client.drive.v1.import_task.create(import_req)
         if import_resp.code != 0:
-            raise Exception(f"创建导入任务失败: {json.loads(import_resp)}")
+            raise Exception(format_response_error("创建导入任务失败", import_resp))
         return import_resp.data.ticket 
 
     def _get_import_docx_token(self, ticket) -> str:
@@ -140,7 +213,7 @@ class FeishuClient:
         while True:
             response: GetImportTaskResponse = self.client.drive.v1.import_task.get(request)
             if response.code != 0:
-                raise Exception(f"获取导入任务状态失败: {response}")
+                raise Exception(format_response_error("获取导入任务状态失败", response))
 
             job_status = response.data.result.job_status
             if job_status == 0:  # 处理成功
@@ -155,7 +228,7 @@ class FeishuClient:
             time.sleep(2)
         
 
-    def import_md_to_docx(self, file_path, title, folder_token):
+    def import_md_to_docx(self, file_path, title, folder_token, existing_doc_token: Optional[str] = None):
         """md文件导入飞书文档
         """
         # 读取并解析Markdown文件
@@ -179,8 +252,14 @@ class FeishuClient:
         # 把markdown中记录的图片路径，上传图片到飞书文档，更新image block的image_key
         if img_path_list:
             self._update_document_images(doc_token, img_path_list)
+
+        # 如果已有旧文档，更新策略是：先创建新文档，再删除旧文档，确保只保留一份目标文档
+        if existing_doc_token and existing_doc_token != doc_token:
+            self._delete_document(existing_doc_token)
+
         # 删除上传的md文件
         self._del_file(file_token)
+        return doc_token
 
     def _update_document_images(self, doc_token, img_path_list: List):
         """更新文档中的图片
@@ -247,7 +326,7 @@ class FeishuClient:
         
         resp: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request)
         if resp.code != 0:
-            raise Exception(f"上传图片到云文档失败: {resp}")
+            raise Exception(format_response_error("上传图片到云文档失败", resp))
         print(f"上传图片到云文档成功: {resp}")
         return resp.data.file_token
 
@@ -280,10 +359,10 @@ class FeishuClient:
         # 发起请求
         response: PatchDocumentBlockResponse = self.client.docx.v1.document_block.patch(request)
         if response.code != 0:
-            raise Exception(f"更新图片块失败: {response}")
+            raise Exception(format_response_error("更新图片块失败", response))
         print("更新图片块成功")
 
-    def _del_file(self, file_token): 
+    def _del_file(self, file_token):
         """删除文件
         """
         request: DeleteFileRequest = DeleteFileRequest.builder() \
@@ -292,5 +371,34 @@ class FeishuClient:
         .build()
         resp: DeleteFileResponse = self.client.drive.v1.file.delete(request)
         if resp.code!= 0:
-            raise Exception(f"删除文件失败: {json.loads(resp)}")
+            raise Exception(format_response_error("删除文件失败", resp))
         print("删除文件成功")
+
+    def _delete_document(self, doc_token):
+        """删除文档文件"""
+        last_not_found = False
+        for file_type in ("docx", "file"):
+            request: DeleteFileRequest = DeleteFileRequest.builder() \
+                .file_token(doc_token) \
+                .type(file_type) \
+            .build()
+            resp: DeleteFileResponse = self.client.drive.v1.file.delete(request)
+
+            if resp.code == 0:
+                print(f"删除旧文档成功 (type={file_type}): {doc_token}")
+                return
+
+            if self._is_old_doc_not_found(resp):
+                last_not_found = True
+                continue
+
+            # 与临时md文件保持行为一致，其他错误直接抛错，避免静默导致重复文件
+            raise Exception(format_response_error("删除旧文档失败", resp))
+
+        if last_not_found:
+            print(f"旧文档不存在或已被删除，跳过删除: {doc_token}")
+            return
+
+    @staticmethod
+    def _is_old_doc_not_found(resp):
+        return str(getattr(resp, "code", "")) == "1061003"
