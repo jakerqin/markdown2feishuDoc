@@ -60,7 +60,13 @@ https://xxx.feishu.cn/drive/folder/xxxxxxxxxxxxx
 
 ### 4. 配置环境变量
 
-在项目根目录创建 `.env`：
+复制示例环境变量文件，并按自己的飞书应用信息修改 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` 示例：
 
 ```bash
 FEISHU_APP_ID=your_feishu_app_id
@@ -85,12 +91,12 @@ cp sync_targets.example.json sync_targets.json
   "targets": [
     {
       "id": "research",
-      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
+      "local_dir": "/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
       "feishu_folder_token": "your_research_folder_token"
     },
     {
       "id": "work",
-      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/worknotes",
+      "local_dir": "/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/worknotes",
       "feishu_folder_token": "your_work_folder_token"
     }
   ]
@@ -108,20 +114,20 @@ cp sync_targets.example.json sync_targets.json
 如果项目根目录没有 `sync_targets.json`，程序会回退到旧版 `.env` 单目标配置：
 
 ```bash
-LOCAL_MARKDOWN_DIR=/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace
+LOCAL_MARKDOWN_DIR=/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace
 DEFAULT_PARENT_FOLDER_TOKEN=your_folder_token
 ```
 
 如果从终端复制 iCloud 路径，可能会带反斜杠：
 
 ```text
-/Users/molly/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
+/Users/yourname/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
 ```
 
 程序会自动规范化为 Python 可读取的路径：
 
 ```text
-/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace
+/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace
 ```
 
 ### 6. 手动同步
@@ -219,7 +225,7 @@ python3 main.py
 开始从本地Markdown文件同步到飞书，共2个同步目标
 开始同步目标: research
 ...
-开始同步目标: diary
+开始同步目标: work
 ...
 同步完成：上传X个，跳过Y个，失败目标0个
 ```
@@ -245,7 +251,7 @@ python3 main.py
 自动任务会打开 Terminal 执行：
 
 ```text
-/Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command
+/Users/yourname/projects/markdown2feishuDoc/scripts/run_sync.command
 ```
 
 这样 iCloud Drive 的读取权限由 Terminal 承担，比让 `launchd` 后台直接运行 Python 更稳定。
@@ -253,27 +259,27 @@ python3 main.py
 如果项目路径或 Python 路径发生变化，需要同步修改：
 
 - `scripts/run_sync.command`
-- `scripts/com.molly.markdown2feishu.sync.plist`
+- `scripts/com.yourname.markdown2feishu.sync.plist`
 
 ### 安装或重载 LaunchAgent
 
 ```bash
-cp scripts/com.molly.markdown2feishu.sync.plist ~/Library/LaunchAgents/
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.molly.markdown2feishu.sync.plist 2>/dev/null
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.molly.markdown2feishu.sync.plist
-launchctl enable gui/$(id -u)/com.molly.markdown2feishu.sync
+cp scripts/com.yourname.markdown2feishu.sync.plist ~/Library/LaunchAgents/
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.yourname.markdown2feishu.sync.plist 2>/dev/null
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.markdown2feishu.sync.plist
+launchctl enable gui/$(id -u)/com.yourname.markdown2feishu.sync
 ```
 
 立即触发一次：
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.molly.markdown2feishu.sync
+launchctl kickstart -k gui/$(id -u)/com.yourname.markdown2feishu.sync
 ```
 
 查看任务状态：
 
 ```bash
-launchctl print gui/$(id -u)/com.molly.markdown2feishu.sync
+launchctl print gui/$(id -u)/com.yourname.markdown2feishu.sync
 ```
 
 ## 日志
@@ -385,7 +391,7 @@ PY
 
 如果某个 target 显示 `changed=0`，但对应文件的 `doc_token=NO`，通常说明之前执行过 `python3 main.py --mark-current-synced`。这个命令只记录当前文件状态，不会上传文件。
 
-如果只想让某个 target 重新上传，可以先备份状态文件，再删除该 target 的状态。下面以 `diary` 为例；实际使用时把 `target_id` 改成自己的同步目标 `id`。
+如果只想让某个 target 重新上传，可以先备份状态文件，再删除该 target 的状态。下面以 `work` 为例；实际使用时把 `target_id` 改成自己的同步目标 `id`。
 
 ```bash
 cp .sync_state.json .sync_state.backup.json
@@ -393,7 +399,7 @@ cp .sync_state.json .sync_state.backup.json
 python3 - <<'PY'
 import json
 
-target_id = "diary"
+target_id = "work"
 path = ".sync_state.json"
 
 with open(path, "r", encoding="utf-8") as f:
@@ -430,7 +436,7 @@ markdown2feishuDoc/
 ├── docs/
 │   └── SYNC_AUTOMATION.md
 ├── scripts/
-│   ├── com.molly.markdown2feishu.sync.plist
+│   ├── com.yourname.markdown2feishu.sync.plist
 │   └── run_sync.command
 ├── config/
 │   ├── __init__.py

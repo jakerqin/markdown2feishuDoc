@@ -15,13 +15,13 @@ python3 main.py
 示例 Markdown 来源目录：
 
 ```text
-/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace
+/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace
 ```
 
 当前项目目录：
 
 ```text
-/Users/molly/projects/markdown2feishuDoc
+/Users/yourname/projects/markdown2feishuDoc
 ```
 
 ## 新增功能概览
@@ -70,12 +70,12 @@ python3 main.py --mark-current-synced
   "targets": [
     {
       "id": "research",
-      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
+      "local_dir": "/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
       "feishu_folder_token": "your_research_folder_token"
     },
     {
       "id": "work",
-      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/worknotes",
+      "local_dir": "/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/worknotes",
       "feishu_folder_token": "your_work_folder_token"
     }
   ]
@@ -96,9 +96,9 @@ python3 main.py --mark-current-synced
    - 如果返回 `1061003 (not found)`，视为旧文档已不存在，视为幂等成功，不阻断本次同步。
 
 修复范围文件：
-- [/Users/molly/projects/markdown2feishuDoc/main.py](/Users/molly/projects/markdown2feishuDoc/main.py)
-- [/Users/molly/projects/markdown2feishuDoc/src/feishu_client.py](/Users/molly/projects/markdown2feishuDoc/src/feishu_client.py)
-- [/Users/molly/projects/markdown2feishuDoc/src/sync_state.py](/Users/molly/projects/markdown2feishuDoc/src/sync_state.py)
+- [`main.py`](../main.py)
+- [`src/feishu_client.py`](../src/feishu_client.py)
+- [`src/sync_state.py`](../src/sync_state.py)
 
 ### `src/path_utils.py`
 
@@ -111,13 +111,13 @@ normalize_config_path(path)
 它解决的问题是：Finder 或终端复制出来的 iCloud 路径可能长这样：
 
 ```text
-/Users/molly/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
+/Users/yourname/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
 ```
 
 但 `.env` 和 Python 实际需要的是：
 
 ```text
-/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace
+/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace
 ```
 
 该函数会自动去掉多余引号、首尾空格，并处理反斜杠转义。
@@ -168,7 +168,7 @@ normalize_config_path(path)
 新增 Terminal 执行入口：
 
 ```text
-/Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command
+/Users/yourname/projects/markdown2feishuDoc/scripts/run_sync.command
 ```
 
 它会：
@@ -178,23 +178,23 @@ normalize_config_path(path)
 3. 把标准输出写入：
 
 ```text
-/Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.out.log
+/Users/yourname/projects/markdown2feishuDoc/logs/feishu_sync.out.log
 ```
 
 4. 把错误输出写入：
 
 ```text
-/Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.err.log
+/Users/yourname/projects/markdown2feishuDoc/logs/feishu_sync.err.log
 ```
 
-### `scripts/com.molly.markdown2feishu.sync.plist`
+### `scripts/com.yourname.markdown2feishu.sync.plist`
 
 新增/更新 macOS LaunchAgent 配置。
 
 当前定时任务每天凌晨 5 点执行：
 
 ```text
-/usr/bin/open -a Terminal /Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command
+/usr/bin/open -a Terminal /Users/yourname/projects/markdown2feishuDoc/scripts/run_sync.command
 ```
 
 这样任务由 Terminal 执行，读取 iCloud Drive 的权限由 Terminal 承担，比后台 Python 直接访问 iCloud Drive 更稳定。
@@ -202,7 +202,7 @@ normalize_config_path(path)
 已安装的 LaunchAgent 位于：
 
 ```text
-/Users/molly/Library/LaunchAgents/com.molly.markdown2feishu.sync.plist
+/Users/yourname/Library/LaunchAgents/com.yourname.markdown2feishu.sync.plist
 ```
 
 ## 为什么改为 Terminal 方案
@@ -241,7 +241,7 @@ Terminal sync exit: 0
 任务名称：
 
 ```text
-com.molly.markdown2feishu.sync
+com.yourname.markdown2feishu.sync
 ```
 
 执行时间：
@@ -253,21 +253,21 @@ com.molly.markdown2feishu.sync
 查看任务状态：
 
 ```bash
-launchctl print gui/$(id -u)/com.molly.markdown2feishu.sync
+launchctl print gui/$(id -u)/com.yourname.markdown2feishu.sync
 ```
 
 立即触发一次：
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.molly.markdown2feishu.sync
+launchctl kickstart -k gui/$(id -u)/com.yourname.markdown2feishu.sync
 ```
 
 重新加载任务：
 
 ```bash
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.molly.markdown2feishu.sync.plist 2>/dev/null
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.molly.markdown2feishu.sync.plist
-launchctl enable gui/$(id -u)/com.molly.markdown2feishu.sync
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.yourname.markdown2feishu.sync.plist 2>/dev/null
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.markdown2feishu.sync.plist
+launchctl enable gui/$(id -u)/com.yourname.markdown2feishu.sync
 ```
 
 ## 日志查看
@@ -275,19 +275,19 @@ launchctl enable gui/$(id -u)/com.molly.markdown2feishu.sync
 查看正常输出：
 
 ```bash
-tail -80 /Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.out.log
+tail -80 /Users/yourname/projects/markdown2feishuDoc/logs/feishu_sync.out.log
 ```
 
 查看错误输出：
 
 ```bash
-tail -80 /Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.err.log
+tail -80 /Users/yourname/projects/markdown2feishuDoc/logs/feishu_sync.err.log
 ```
 
 旧日志中可能存在以下历史错误，可以忽略：
 
 ```text
-can't open file '/Users/molly/Downloads/markdown2feishuDoc/main.py'
+can't open file '/Users/yourname/Downloads/markdown2feishuDoc/main.py'
 read-only variable: status
 找到0个Markdown文件
 ```
@@ -299,7 +299,7 @@ read-only variable: status
 ### 手动运行同步
 
 ```bash
-cd /Users/molly/projects/markdown2feishuDoc
+cd /Users/yourname/projects/markdown2feishuDoc
 python3 main.py
 ```
 
@@ -308,14 +308,14 @@ python3 main.py
 如果你已经手动上传过当前文件，不希望下一次定时任务重复上传，可以执行：
 
 ```bash
-cd /Users/molly/projects/markdown2feishuDoc
+cd /Users/yourname/projects/markdown2feishuDoc
 python3 main.py --mark-current-synced
 ```
 
 ### 通过 Terminal 入口手动运行
 
 ```bash
-/Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command
+/Users/yourname/projects/markdown2feishuDoc/scripts/run_sync.command
 ```
 
 ### 修改同步目标
@@ -327,7 +327,7 @@ python3 main.py --mark-current-synced
   "targets": [
     {
       "id": "research",
-      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
+      "local_dir": "/Users/yourname/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
       "feishu_folder_token": "your_research_folder_token"
     }
   ]
@@ -337,7 +337,7 @@ python3 main.py --mark-current-synced
 不要在配置中写终端转义格式：
 
 ```text
-/Users/molly/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
+/Users/yourname/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
 ```
 
 ## 权限要求
@@ -383,7 +383,7 @@ Terminal sync exit: 0
 运行测试：
 
 ```bash
-cd /Users/molly/projects/markdown2feishuDoc
+cd /Users/yourname/projects/markdown2feishuDoc
 python3 -m unittest discover -s tests
 ```
 

@@ -2,7 +2,7 @@
 
 set -u
 
-PROJECT_DIR="/Users/molly/projects/markdown2feishuDoc"
+PROJECT_DIR="/Users/yourname/projects/markdown2feishuDoc"
 PYTHON_BIN="/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9"
 LOG_DIR="$PROJECT_DIR/logs"
 OUT_LOG="$LOG_DIR/feishu_sync.out.log"

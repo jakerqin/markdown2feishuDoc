@@ -17,12 +17,12 @@ class SyncTargetsTests(unittest.TestCase):
                         "targets": [
                             {
                                 "id": "research",
-                                "local_dir": "/Users/molly/Library/Mobile\\ Documents/research",
+                                "local_dir": "/Users/yourname/Library/Mobile\\ Documents/research",
                                 "feishu_folder_token": "fld_research",
                             },
                             {
                                 "id": "work",
-                                "local_dir": "/Users/molly/Library/Mobile Documents/work",
+                                "local_dir": "/Users/yourname/Library/Mobile Documents/work",
                                 "feishu_folder_token": "fld_work",
                             },
                         ]
@@ -34,7 +34,7 @@ class SyncTargetsTests(unittest.TestCase):
 
             self.assertEqual(["research", "work"], [target.id for target in targets])
             self.assertEqual(
-                "/Users/molly/Library/Mobile Documents/research",
+                "/Users/yourname/Library/Mobile Documents/research",
                 targets[0].local_dir,
             )
             self.assertEqual("fld_work", targets[1].feishu_folder_token)

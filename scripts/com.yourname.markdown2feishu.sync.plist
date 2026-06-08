@@ -8,18 +8,18 @@
 		<string>utf-8</string>
 	</dict>
 	<key>Label</key>
-	<string>com.molly.markdown2feishu.sync</string>
+	<string>com.yourname.markdown2feishu.sync</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/usr/bin/open</string>
 		<string>-a</string>
 		<string>Terminal</string>
-		<string>/Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command</string>
+		<string>/Users/yourname/projects/markdown2feishuDoc/scripts/run_sync.command</string>
 	</array>
 	<key>StandardErrorPath</key>
-	<string>/Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.err.log</string>
+	<string>/Users/yourname/projects/markdown2feishuDoc/logs/feishu_sync.err.log</string>
 	<key>StandardOutPath</key>
-	<string>/Users/molly/projects/markdown2feishuDoc/logs/feishu_sync.out.log</string>
+	<string>/Users/yourname/projects/markdown2feishuDoc/logs/feishu_sync.out.log</string>
 	<key>StartCalendarInterval</key>
 	<dict>
 		<key>Hour</key>
@@ -28,6 +28,6 @@
 		<integer>0</integer>
 	</dict>
 	<key>WorkingDirectory</key>
-	<string>/Users/molly/projects/markdown2feishuDoc</string>
+	<string>/Users/yourname/projects/markdown2feishuDoc</string>
 </dict>
 </plist>
