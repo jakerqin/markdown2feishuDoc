@@ -2,17 +2,17 @@
 
 更新时间：2026-06-08
 
-本文档记录本项目这次新增和修改的功能：iCloud Drive Markdown 读取、增量同步、飞书文档去重/更新、每天凌晨 5 点自动执行，以及最终采用的 Terminal 定时执行方案。
+本文档记录本项目这次新增和修改的功能：iCloud Drive Markdown 读取、多目标配置、增量同步、飞书文档去重/更新、每天凌晨 5 点自动执行，以及最终采用的 Terminal 定时执行方案。
 
 ## 当前目标
 
-把本机 iCloud Drive 中的 Markdown 文件自动同步到飞书云文档，避免每天手动执行：
+把本机一个或多个 Markdown 文件夹自动同步到对应的飞书云文档文件夹，避免每天手动执行：
 
 ```bash
 python3 main.py
 ```
 
-当前 Markdown 来源目录：
+示例 Markdown 来源目录：
 
 ```text
 /Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace
@@ -28,13 +28,14 @@ python3 main.py
 
 1. 支持 `.env` 中配置 iCloud Drive 路径。
 2. 支持从终端复制出来的带反斜杠路径自动规范化。
-3. 支持增量同步，只上传新增或内容变化的 Markdown。
-4. 支持记录已上传文件状态，避免每天重复上传同一批文档。
-5. 支持记录飞书文件夹 token，避免重复创建同名文件夹。
-6. 支持记录飞书文档 token，后续同名文档变更时可删除旧文档并上传新文档。
-7. 支持检测 iCloud `.icloud` 占位文件，并提示先下载到本机。
-8. 支持每天凌晨 5 点通过 macOS `launchd` 自动触发同步。
-9. 定时任务最终改为打开 Terminal 执行脚本，以绕过后台 Python 读取 iCloud Drive 被 macOS 隐私权限拦截的问题。
+3. 支持通过 `sync_targets.json` 配置多组“本地目录 -> 飞书文件夹”映射。
+4. 支持增量同步，只上传新增或内容变化的 Markdown。
+5. 支持记录已上传文件状态，避免每天重复上传同一批文档。
+6. 支持记录飞书文件夹 token，避免重复创建同名文件夹。
+7. 支持记录飞书文档 token，后续同名文档变更时可删除旧文档并上传新文档。
+8. 支持检测 iCloud `.icloud` 占位文件，并提示先下载到本机。
+9. 支持每天凌晨 5 点通过 macOS `launchd` 自动触发同步。
+10. 定时任务最终改为打开 Terminal 执行脚本，以绕过后台 Python 读取 iCloud Drive 被 macOS 隐私权限拦截的问题。
 
 ## 主要文件变更
 
@@ -50,15 +51,38 @@ python3 main.py --mark-current-synced
 
 同步流程现在变为：
 
-1. 读取 `.env` 中的 `LOCAL_MARKDOWN_DIR`。
-2. 使用 `normalize_config_path()` 规范化路径。
-3. 扫描 Markdown 文件。
+1. 读取 `sync_targets.json` 中的多组同步目标；如果该文件不存在，则回退到旧版 `.env` 单目标配置。
+2. 使用 `normalize_config_path()` 规范化每个本地路径。
+3. 逐个同步目标扫描 Markdown 文件。
 4. 检查 iCloud `.icloud` 占位文件。
-5. 读取 `.sync_state.json`。
+5. 读取 `.sync_state.json` 中该同步目标的状态。
 6. 只筛选新增或内容变化的 Markdown。
 7. 复用已记录或已存在的飞书文件夹。
 8. 上传变化文件。
 9. 上传成功后更新 `.sync_state.json`。
+
+### `sync_targets.json`
+
+新增多目标同步配置文件。示例：
+
+```json
+{
+  "targets": [
+    {
+      "id": "research",
+      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
+      "feishu_folder_token": "your_research_folder_token"
+    },
+    {
+      "id": "work",
+      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/worknotes",
+      "feishu_folder_token": "your_work_folder_token"
+    }
+  ]
+}
+```
+
+`id` 用于隔离同步状态，避免不同本地目录下的同名 Markdown 在 `.sync_state.json` 中互相覆盖。真实的 `sync_targets.json` 已被 `.gitignore` 忽略，仓库只提交 `sync_targets.example.json`。
 
 ### 覆盖更新与去重修复（2026-06-08）
 
@@ -110,11 +134,12 @@ normalize_config_path(path)
 
 记录内容包括：
 
-1. 每个 Markdown 的相对路径。
-2. 文件内容 SHA-256。
-3. 文件大小。
-4. 已上传飞书文档的 `doc_token`。
-5. 已创建或复用的飞书文件夹 token。
+1. 每个同步目标的 `id`。
+2. 目标内每个 Markdown 的相对路径。
+3. 文件内容 SHA-256。
+4. 文件大小。
+5. 已上传飞书文档的 `doc_token`。
+6. 已创建或复用的飞书文件夹 token。
 
 这个文件用于判断文件是否变化，也是增量同步和避免重复创建文件夹的基础。
 
@@ -293,18 +318,26 @@ python3 main.py --mark-current-synced
 /Users/molly/projects/markdown2feishuDoc/scripts/run_sync.command
 ```
 
-### 修改同步目录
+### 修改同步目标
 
-编辑 `.env`：
+优先编辑 `sync_targets.json`：
 
-```env
-LOCAL_MARKDOWN_DIR=/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace
+```json
+{
+  "targets": [
+    {
+      "id": "research",
+      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
+      "feishu_folder_token": "your_research_folder_token"
+    }
+  ]
+}
 ```
 
-不要在 `.env` 中写终端转义格式：
+不要在配置中写终端转义格式：
 
 ```text
-LOCAL_MARKDOWN_DIR=/Users/molly/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
+/Users/molly/Library/Mobile\ Documents/com\~apple\~CloudDocs/researchspace
 ```
 
 ## 权限要求

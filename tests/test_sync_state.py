@@ -96,6 +96,40 @@ class SyncStateTests(unittest.TestCase):
             state = SyncState(state_path)
             self.assertEqual({}, state.folders)
 
+    def test_same_relative_path_is_isolated_by_target(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = os.path.join(tmpdir, "state.json")
+            first_path = os.path.join(tmpdir, "first.md")
+            second_path = os.path.join(tmpdir, "second.md")
+            with open(first_path, "w", encoding="utf-8") as f:
+                f.write("first")
+            with open(second_path, "w", encoding="utf-8") as f:
+                f.write("second")
+
+            first_info = {"path": first_path, "relative_path": "note.md"}
+            second_info = {"path": second_path, "relative_path": "note.md"}
+            state = SyncState(state_path)
+            state.mark_uploaded(first_info, doc_token="doc-first", target_id="first")
+            state.mark_uploaded(second_info, doc_token="doc-second", target_id="second")
+            state.save()
+
+            reloaded = SyncState(state_path)
+            lookup = {"relative_path": "note.md"}
+            self.assertEqual("doc-first", reloaded.get_doc_token(lookup, target_id="first"))
+            self.assertEqual("doc-second", reloaded.get_doc_token(lookup, target_id="second"))
+
+    def test_folder_tokens_are_isolated_by_target(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = os.path.join(tmpdir, "state.json")
+            state = SyncState(state_path)
+            state.mark_folder("archive", "fld-first", target_id="first")
+            state.mark_folder("archive", "fld-second", target_id="second")
+            state.save()
+
+            reloaded = SyncState(state_path)
+            self.assertEqual("fld-first", reloaded.get_folder_token("archive", target_id="first"))
+            self.assertEqual("fld-second", reloaded.get_folder_token("archive", target_id="second"))
+
 
 if __name__ == "__main__":
     unittest.main()

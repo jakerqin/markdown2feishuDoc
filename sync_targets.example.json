@@ -1,0 +1,14 @@
+{
+  "targets": [
+    {
+      "id": "research",
+      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/researchspace",
+      "feishu_folder_token": "your_research_folder_token"
+    },
+    {
+      "id": "work",
+      "local_dir": "/Users/molly/Library/Mobile Documents/com~apple~CloudDocs/worknotes",
+      "feishu_folder_token": "your_work_folder_token"
+    }
+  ]
+}
