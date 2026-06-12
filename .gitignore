@@ -1,6 +1,11 @@
 .env
+.DS_Store
 .vscode
 .spec-workflow
 .idea
 config/*
 *.pyc
+.sync_state.json
+sync_targets.json
+.pycache-test/
+logs/

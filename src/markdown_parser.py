@@ -19,13 +19,26 @@ class MarkdownParser:
                     rel_dir = os.path.relpath(root, self.markdown_dir)
                     if rel_dir == '.':
                         rel_dir = ''
+                    relative_path = os.path.normpath(os.path.join(rel_dir, file))
                     markdown_files.append({
                         'path': unquote(os.path.join(root, file)),
                         'name': os.path.splitext(file)[0],
-                        'folder': rel_dir
+                        'folder': rel_dir,
+                        'relative_path': relative_path,
                     })
         
         return markdown_files
+
+    def get_icloud_placeholder_files(self):
+        """获取尚未下载到本机的 iCloud 占位文件"""
+        placeholder_files = []
+
+        for root, dirs, files in os.walk(self.markdown_dir):
+            for file in files:
+                if file.endswith(".icloud"):
+                    placeholder_files.append(unquote(os.path.join(root, file)))
+
+        return placeholder_files
     
     @staticmethod
     def extract_images_from_markdown(file_path, content):
